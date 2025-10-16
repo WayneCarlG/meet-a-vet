@@ -1,0 +1,42 @@
+version: '3.9'
+services:
+  backend:
+    build: ./backend
+    container_name: flask-backend
+    command: gunicorn -b 0.0.0.0:5000 wsgi:app
+    volumes:
+      - ./backend:/app
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    env_file: .env
+
+  frontend:
+    build: ./frontend/mav_front
+    container_name: react-frontend
+    volumes:
+      - ./frontend:/usr/src/app
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+
+  db:
+    image: mongo:latest   # Or postgres:latest
+    container_name: database
+    volumes:
+      - db_data:/data/db
+    ports:
+      - "27017:27017"
+
+  blockchain-node:
+    build: ./blockchain-node
+    container_name: blockchain-node
+    ports:
+      - "8545:8545"
+    volumes:
+      - ./blockchain-node:/usr/src/app
+
+volumes:
+  db_data:
