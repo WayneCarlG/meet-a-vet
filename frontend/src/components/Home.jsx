@@ -1,8 +1,14 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import myPhoto from "../assets/pet.jpg";
 import { FaStethoscope, FaUserMd, FaComments, FaPaw } from "react-icons/fa";
 
 export default function Home() {
+  const navigate = useNavigate();
+
+  const handleLogin = () => {
+    navigate("/login");
+  };
   return (
     <div className="bg-gray-50 min-h-screen flex flex-col">
       {/* Navbar */}
@@ -18,7 +24,7 @@ export default function Home() {
           <button className="border border-blue-600 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition">
             Signup
           </button>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+          <button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
             Login
           </button>
         </nav>
