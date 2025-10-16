@@ -31,8 +31,9 @@ export default function Home() {
             Your Pet’s Health, <span className="text-blue-600">Anywhere, Anytime</span>
           </h2>
           <p className="text-gray-600 text-lg">
-            Connect with certified veterinary professionals instantly for teleconsultations, 
-            prescriptions, and personalized advice — all from the comfort of your home.
+            Connect with certified veterinary professionals instantly for 
+            teleconsultations, prescriptions, and personalized advice — 
+            all from the comfort of your home.
           </p>
           <div className="flex space-x-4">
             <button className="bg-blue-600 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-700 transition">
