@@ -2,16 +2,16 @@ import React, { useState } from 'react';
 
 const SignUpForm = () => {
   const roles = [
-    { value: 'paraprofessional', label: 'Veterinary Paraprofessional' },
-    { value: 'surgeon', label: 'Veterinary Surgeon' },
     { value: 'farmer', label: 'Farmer' },
+    { value: 'surgeon', label: 'Veterinary Surgeon' },
+    { value: 'paraprofessional', label: 'Veterinary Paraprofessional' },
   ];
 
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
-    role: roles[0].value, // Default to the first role
+    role: roles[0].value, // Default to the first role: Farmer
     licenseNumber: '',
     licenseExpiry: '',
   });
@@ -30,6 +30,7 @@ const SignUpForm = () => {
     setFormData(prev => ({ 
       ...prev, 
       role: newRole,
+      // Clear license fields if switching away from Surgeon
       licenseNumber: newRole === 'surgeon' ? prev.licenseNumber : '',
       licenseExpiry: newRole === 'surgeon' ? prev.licenseExpiry : '',
     }));
@@ -76,7 +77,6 @@ const SignUpForm = () => {
   );
 
   const handleLoginClick = (e) => {
-      // Prevent default hash navigation if the link is a real button/route component
       e.preventDefault(); 
       alert("Navigating to Login...");
   };
@@ -165,12 +165,11 @@ const SignUpForm = () => {
           </div>
         </form>
         
-        {/* Added Login Link - FIX APPLIED HERE */}
+        {/* Login Link */}
         <div className="mt-4 text-center">
           <p className="text-sm text-gray-500">
             Already have an account? 
             <a 
-              // FIX: Used a valid looking path instead of '#'
               href="/login" 
               onClick={handleLoginClick}
               className="font-medium text-indigo-600 hover:text-indigo-700 ml-1"
