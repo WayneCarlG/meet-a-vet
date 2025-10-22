@@ -9,6 +9,10 @@ export default function Home() {
   const handleLogin = () => {
     navigate("/login");
   };
+
+  const handleRegister = () => {
+    navigate("register");
+  }
   return (
     <div className="bg-gray-50 min-h-screen flex flex-col">
       {/* Navbar */}
@@ -21,7 +25,7 @@ export default function Home() {
           <a href="#features" className="hover:text-blue-600">Features</a>
           <a href="#services" className="hover:text-blue-600">Services</a>
           <a href="#contact" className="hover:text-blue-600">Contact</a>
-          <button className="border border-blue-600 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition">
+          <button onClick={handleRegister} className="border border-blue-600 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition">
             Signup
           </button>
           <button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
