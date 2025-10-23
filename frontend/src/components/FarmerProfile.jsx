@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 // --- DATA ---
 
@@ -368,9 +369,11 @@ const ProfileHeaderCard = () => {
     { name: 'Quick actions', key: 'actions' },
   ];
 
-  const handleLogout = () => {
-    alert('Logging out...');
-  };
+  // const handleLogout = () => {
+  //   alert('Logging out...');
+  // };
+
+  const navigate = useNavigate();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -408,7 +411,7 @@ const ProfileHeaderCard = () => {
         
         {/* Logout Button */}
         <button
-          onClick={handleLogout}
+          onClick={() => { navigate('/'); }}
           className="flex items-center text-white text-sm font-medium opacity-90 hover:opacity-100 transition-opacity p-2 rounded-md mt-1"
         >
           <LogoutIcon /> 

@@ -7,20 +7,19 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const navigate = useNavigate();
+
   const handleSubmit = (e) => {
     // e.preventDefault();
-    e.preventDefault();
     // console.log("Email:", email);
     // console.log("Password:", password);
     // Will be later replace this with a backend API call (Flask endpoint)
-    const navigate = useNavigate();
-    navigate('/farmer-profile');
-    };
+  };
 
-    return (
+  return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-white to-blue-50">
       <div className="bg-white shadow-2xl rounded-2xl w-full max-w-md p-8">
-      {/* Logo */}
+        {/* Logo */}
         <div className="flex justify-center items-center space-x-2 mb-6">
           <FaPaw className="text-blue-600 text-3xl" />
           <h1 className="text-2xl font-bold text-gray-800">Meet-A-Vet</h1>
@@ -73,7 +72,7 @@ export default function Login() {
 
           <button
             type="submit"
-            onClick={handleSubmit}
+            onClick={navigate("/farmer-profile")}
             className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition duration-200"
           >
             Login
