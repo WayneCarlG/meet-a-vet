@@ -1,43 +1,105 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import api from "../api";
+import { useNavigate } from "react-router-dom";
 
-// --- DATA ---
+// const FarmerProfile = () => {
+//   const [profile, setProfile] = useState(null);
+//   const [error, setError] = useState("");
 
-const userData = {
-  name: 'Alex Johnson',
-  username: 'AlexJ',
-  firstName: 'Alex',
-  lastName: 'Johnson',
-  avatarUrl: 'https://i.pravatar.cc/150?img=1', 
-  email: 'alex.j@example.com',
-  phone1: '555-123-4567',
-  phone2: '',
-  location: 'San Francisco, CA',
-  securityStatus: 'Password last changed: 2 days ago',
-};
-
-const summaryData = {
-  totalAnimals: 1540,
-  totalSpecies: 5,
-  scheduledAppointments: 18,
-  speciesDistribution: [
-    { name: 'Domestic Dog (Canis familiaris)', value: 650, fill: '#4f46e5' }, // indigo-700
-    { name: 'Domestic Cat (Felis catus)', value: 400, fill: '#10b981' }, // emerald-600
-    { name: 'Cattle (Bos taurus or Bos indicus)', value: 300, fill: '#fbbf24' }, // amber-500
-    { name: 'Domestic Sheep (Ovis aries)', value: 120, fill: '#ef4444' }, // red-500
-    { name: 'Domestic Pig (Sus domesticus)', value: 70, fill: '#a855f7' }, // purple-500
-  ],
-  animalRecords: [
-    { id: 1001, name: 'Buster', species: 'Domestic Dog', age: 3, weight: 35.2 },
-    { id: 1002, name: 'Whiskers', species: 'Domestic Cat', age: 5, weight: 5.1 },
-    { id: 1003, name: 'Babe', species: 'Domestic Pig', age: 1, weight: 150.0 },
-    { id: 1004, name: 'Daisy', species: 'Cattle', age: 7, weight: 650.5 },
-    { id: 1005, name: 'Barnaby', species: 'Domestic Sheep', age: 2, weight: 85.0 },
-  ],
-};
+// useEffect(() => {
+//   const fetchProfile = async () => {
+//     try {
+//       const res = await api.get("/profile");
+//       setProfile(res.data);
+//     } catch (err) {
+//       console.error('API error fetching profile', err);
+//       if (err.response) {
+//         console.error('status', err.response.status);
+//         console.error('data', err.response.data);
+//         // show a friendly message to the user if server provides one
+//         const serverMsg =
+//           err.response.data?.message ||
+//           err.response.data?.error ||
+//           JSON.stringify(err.response.data);
+//         setError(`Server error (${err.response.status}): ${serverMsg}`);
+//       } else {
+//         setError('Unable to reach server. Please try again.');
+//       }
+//     }
+//   };
+//   fetchProfile();
+// }, []);
 
 
-// --- UTILITY COMPONENTS ---
+//   if (error) {
+//     return (
+//       <div className="flex justify-center items-center h-screen text-red-500 text-lg">
+//         {error}
+//       </div>
+//     );
+//   }
+
+//   if (!profile) {
+//     return (
+//       <div className="flex justify-center items-center h-screen text-gray-500 text-lg">
+//         Loading profile...
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="max-w-4xl mx-auto mt-10 p-8 bg-white shadow-xl rounded-2xl border border-gray-200">
+//       <div className="flex flex-col md:flex-row items-center gap-6">
+//         <img
+//           src={profile.avatarUrl || "/default-avatar.png"}
+//           alt="Profile Avatar"
+//           className="w-32 h-32 rounded-full object-cover border-4 border-teal-500"
+//         />
+//         <div>
+//           <h2 className="text-2xl font-bold text-gray-800 mb-2">
+//             {profile.firstName} {profile.lastName}
+//           </h2>
+//           <p className="text-gray-600">{profile.email}</p>
+//         </div>
+//       </div>
+
+//       <hr className="my-6 border-gray-300" />
+
+//       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-gray-700">
+//         <div>
+//           <h3 className="text-lg font-semibold text-teal-600 mb-2">Contact</h3>
+//           <p>
+//             <span className="font-medium">Phone 1:</span> {profile.phone1 || "N/A"}
+//           </p>
+//           <p>
+//             <span className="font-medium">Phone 2:</span> {profile.phone2 || "N/A"}
+//           </p>
+//           <p>
+//             <span className="font-medium">Location:</span> {profile.location || "N/A"}
+//           </p>
+//         </div>
+
+//         <div>
+//           <h3 className="text-lg font-semibold text-teal-600 mb-2">Account Info</h3>
+//           <p>
+//             <span className="font-medium">Created:</span>{" "}
+//             {profile.created_at
+//               ? new Date(profile.created_at).toLocaleDateString()
+//               : "N/A"}
+//           </p>
+//           {profile.license_expiry && (
+//             <p>
+//               <span className="font-medium">License Expiry:</span>{" "}
+//               {profile.license_expiry}
+//             </p>
+//           )}
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default FarmerProfile;
 
 const LogoutIcon = () => (
   <svg 
@@ -113,9 +175,7 @@ const ActionDropdown = ({ id }) => {
   );
 };
 
-
 // --- TAB CONTENT COMPONENTS ---
-
 const PieChartPlaceholder = ({ distribution }) => (
   <div className="flex flex-col items-center p-4 bg-white rounded-lg shadow-md h-full">
     <h4 className="text-lg font-semibold mb-3 text-gray-800">Species Distribution</h4>
@@ -152,35 +212,29 @@ const SummaryContent = ({ data }) => {
 
   return (
     <div className="space-y-8">
-      {/* FIRST ROW: Pie Chart and Counter Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
         <div className="lg:col-span-2">
-          <PieChartPlaceholder distribution={data.speciesDistribution} />
+          <PieChartPlaceholder distribution={data.speciesDistribution || []} />
         </div>
-        
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard 
             title="Total Animals" 
-            value={data.totalAnimals} 
+            value={data.totalAnimals || 0} 
             iconClass="bg-indigo-500"
           />
           <StatCard 
             title="Total Species" 
-            value={data.totalSpecies} 
+            value={data.totalSpecies || 0} 
             iconClass="bg-green-500"
           />
           <StatCard 
             title="Scheduled Appointments" 
-            value={data.scheduledAppointments} 
+            value={data.scheduledAppointments || 0} 
             iconClass="bg-yellow-500"
           />
         </div>
       </div>
-
-      {/* SECOND SECTION: Tabular Record of Animals */}
       <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 pt-4">Animal Records</h3>
-
       <div className="overflow-x-auto shadow-md rounded-lg">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -194,7 +248,7 @@ const SummaryContent = ({ data }) => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {data.animalRecords.map((animal) => (
+            {(data.animalRecords || []).map((animal) => (
               <tr key={animal.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{animal.id}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{animal.name}</td>
@@ -215,8 +269,7 @@ const SummaryContent = ({ data }) => {
 
 const QuickActionsContent = () => {
   const [isNotificationOpen, setIsNotificationOpen] = React.useState(false);
-  // activeColor is used in template literals here. Tailwind compiler can generally handle these since the full classes (e.g., bg-indigo-700) are used elsewhere.
-  const activeColor = 'indigo-700'; 
+  // const activeColor = 'indigo-700'; 
 
   const AddAnimalCard = () => (
     <div className="bg-white p-4 rounded-lg shadow-md border-t-4 border-indigo-500">
@@ -224,7 +277,7 @@ const QuickActionsContent = () => {
       <p className="text-sm text-gray-500 mb-3">Register a new animal profile to the farm.</p>
       <button 
         onClick={() => alert('Launching Add Animal Form...')}
-        className={`w-full py-2 px-4 rounded-md text-white bg-${activeColor} hover:bg-indigo-600 transition-colors text-sm`}
+        className={`w-full py-2 px-4 rounded-md text-white bg-indigo-700 hover:bg-indigo-600 transition-colors text-sm`}
       >
         Launch Form
       </button>
@@ -258,16 +311,14 @@ const QuickActionsContent = () => {
     <div className="bg-white p-4 rounded-lg shadow-xl h-full border relative">
       <div className="flex justify-between items-center mb-4">
         <h4 className="text-lg font-semibold text-gray-800">Notifications</h4>
-        
         <button 
           onClick={() => setIsNotificationOpen(!isNotificationOpen)}
-          className={`p-2 rounded-full text-white transition-colors ${isNotificationOpen ? `bg-${activeColor}` : 'bg-gray-500 hover:bg-gray-600'}`}
+          className={`p-2 rounded-full text-white transition-colors ${isNotificationOpen ? `bg-indigo-700` : 'bg-gray-500 hover:bg-gray-600'}`}
           title="Toggle Notifications"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.111A9.957 9.957 0 0012 2c4.97 0 9 3.582 9 8z"></path></svg>
         </button>
       </div>
-      
       <div className={`overflow-hidden transition-all duration-300 ${isNotificationOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
         <div className="space-y-3 pt-2">
           <p className="text-xs text-gray-600 border-b pb-2">Recent Messages/Alerts:</p>
@@ -284,19 +335,13 @@ const QuickActionsContent = () => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      
-      {/* Left Column: Action Cards */}
       <div className="space-y-6">
         <AddAnimalCard />
         <RequestAppointmentCard />
       </div>
-      
-      {/* Middle Column: Calendar */}
       <div>
         <CalendarCard />
       </div>
-      
-      {/* Right Column: Notifications */}
       <div>
         <NotificationPopup />
       </div>
@@ -304,64 +349,55 @@ const QuickActionsContent = () => {
   );
 };
 
-
 const ProfileContent = ({ data, activeColor }) => { 
   return (
-      <div className="space-y-6">
-          <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Profile Details</h2>
-
-          {/* 1. Username, First Name, Last Name fields across the screen */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <FormField label="Username" id="username" defaultValue={data.username} />
-              <FormField label="First Name" id="firstName" defaultValue={data.firstName} />
-              <FormField label="Last Name" id="lastName" defaultValue={data.lastName} />
-          </div>
-
-          {/* 2. Contact Fieldset */}
-          <fieldset className="border p-4 rounded-lg shadow-sm">
-              <legend className="text-lg font-medium text-gray-800 px-2">Contact Information</legend>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-              <div>
-                  <FormField label="Email Address" id="email" type="email" defaultValue={data.email} />
-                  <FormField label="Location" id="location" defaultValue={data.location} />
-              </div>
-              <div>
-                  <FormField label="Phone Number 1" id="phone1" defaultValue={data.phone1} />
-                  <FormField label="Phone Number 2 (Optional)" id="phone2" defaultValue={data.phone2} />
-              </div>
-              </div>
-          </fieldset>
-
-          {/* 3. Security Group with fields for password modification */}
-          <fieldset className="border p-4 rounded-lg shadow-sm">
-              <legend className="text-lg font-medium text-gray-800 px-2">Security</legend>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <FormField label="Current Password" id="currentPassword" type="password" />
-              <FormField label="New Password" id="newPassword" type="password" />
-              <FormField label="Confirm New Password" id="confirmNewPassword" type="password" />
-              </div>
-              
-              <div className="mt-4 flex justify-end">
-                  <button
-                      type="submit"
-                      className={`inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-${activeColor} hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
-                  >
-                      Update Security
-                  </button>
-              </div>
-          </fieldset>
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Profile Details</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <FormField label="Username" id="username" defaultValue={data.username || ""} />
+        <FormField label="First Name" id="firstName" defaultValue={data.firstName || ""} />
+        <FormField label="Last Name" id="lastName" defaultValue={data.lastName || ""} />
       </div>
+      <fieldset className="border p-4 rounded-lg shadow-sm">
+        <legend className="text-lg font-medium text-gray-800 px-2">Contact Information</legend>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+          <div>
+            <FormField label="Email Address" id="email" type="email" defaultValue={data.email || ""} />
+            <FormField label="Location" id="location" defaultValue={data.location || ""} />
+          </div>
+          <div>
+            <FormField label="Phone Number 1" id="phone1" defaultValue={data.phone1 || ""} />
+            <FormField label="Phone Number 2 (Optional)" id="phone2" defaultValue={data.phone2 || ""} />
+          </div>
+        </div>
+      </fieldset>
+      <fieldset className="border p-4 rounded-lg shadow-sm">
+        <legend className="text-lg font-medium text-gray-800 px-2">Security</legend>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <FormField label="Current Password" id="currentPassword" type="password" />
+          <FormField label="New Password" id="newPassword" type="password" />
+          <FormField label="Confirm New Password" id="confirmNewPassword" type="password" />
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="submit"
+            className={`inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-700 hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
+          >
+            Update Security
+          </button>
+        </div>
+      </fieldset>
+    </div>
   );
 };
 
-
 // --- MAIN COMPONENT ---
-
-const ProfileHeaderCard = () => {
+const FarmerProfile = () => {
   const activeColor = 'indigo-700'; 
   const [activeTab, setActiveTab] = React.useState('summary'); 
+  const [profile, setProfile] = useState(null);
+  const [error, setError] = useState("");
+  const [summary, setSummary] = useState(null);
 
   const tabs = [
     { name: 'Profile', key: 'profile' },
@@ -369,47 +405,85 @@ const ProfileHeaderCard = () => {
     { name: 'Quick actions', key: 'actions' },
   ];
 
-  // const handleLogout = () => {
-  //   alert('Logging out...');
-  // };
-
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await api.get("api/profile");
+        setProfile(res.data);
+
+        // Optionally fetch summary data if available from backend
+        // If not, you can mock it or leave as null
+        if (res.data.summary) {
+          setSummary(res.data.summary);
+        } else {
+          setSummary({
+            totalAnimals: res.data.totalAnimals || 0,
+            totalSpecies: res.data.totalSpecies || 0,
+            scheduledAppointments: res.data.scheduledAppointments || 0,
+            speciesDistribution: res.data.speciesDistribution || [],
+            animalRecords: res.data.animalRecords || [],
+          });
+        }
+      } catch (err) {
+        console.error('API error fetching profile', err);
+        if (err.response) {
+          const serverMsg =
+            err.response.data?.message ||
+            err.response.data?.error ||
+            JSON.stringify(err.response.data);
+          setError(`Server error (${err.response.status}): ${serverMsg}`);
+        } else {
+          setError('Unable to reach server. Please try again.');
+        }
+      }
+    };
+    fetchProfile();
+  }, []);
+
   const renderContent = () => {
-    switch (activeTab) {
-      case 'profile':
-        return <ProfileContent data={userData} activeColor={activeColor} />; 
-      case 'summary':
-        return <SummaryContent data={summaryData} />;
-      case 'actions':
-        return <QuickActionsContent />;
-      default:
-        return null;
+    if (activeTab === 'profile') {
+      return <ProfileContent data={profile || {}} activeColor={activeColor} />;
     }
+    if (activeTab === 'summary') {
+      return <SummaryContent data={summary || {}} />;
+    }
+    if (activeTab === 'actions') {
+      return <QuickActionsContent />;
+    }
+    return null;
   };
 
+  if (error) {
+    return (
+      <div className="flex justify-center items-center h-screen text-red-500 text-lg">
+        {error}
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="flex justify-center items-center h-screen text-gray-500 text-lg">
+        Loading profile...
+      </div>
+    );
+  }
+
   return (
-    // 5. Light gray background and 6. Arial font
     <div className="min-h-screen bg-gray-100 font-sans">
-      
-      {/* 1. Full-Width Header Card: FIX APPLIED HERE - Used static class for bg color */}
-      <div 
-        className={`bg-indigo-700 w-full shadow-xl py-10 px-8 flex justify-between items-start rounded-b-lg`}
-      >
-        
-        {/* 2 & 3. Avatar and Name */}
+      <div className={`bg-indigo-700 w-full shadow-xl py-10 px-8 flex justify-between items-start rounded-b-lg`}>
         <div className="flex items-center">
           <img
-            src={userData.avatarUrl}
+            src={profile.avatarUrl || "/default-avatar.png"}
             alt="User Avatar"
             className="w-20 h-20 rounded-full object-cover border-4 border-white mr-6"
           />
           <div className="text-white text-3xl font-bold">
-            {userData.name}
+            {profile.firstName} {profile.lastName}
           </div>
         </div>
-        
-        {/* Logout Button */}
         <button
           onClick={() => { navigate('/'); }}
           className="flex items-center text-white text-sm font-medium opacity-90 hover:opacity-100 transition-opacity p-2 rounded-md mt-1"
@@ -418,39 +492,41 @@ const ProfileHeaderCard = () => {
           <span className="ml-1">logout</span>
         </button>
       </div>
-
-      {/* Tabs and Content Wrapper (Non-overlaying and full-width) */}
       <div className="w-full pt-0 sm:pt-4"> 
-          <div className="bg-white shadow-md">
-            
-            {/* 4. Tabbed Navigation Section (Equally Distributed, End-to-End) */}
-            <div className="flex border-b border-gray-200">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`
-                    flex-grow py-3 px-0 text-sm font-medium transition-colors duration-200
-                    focus:outline-none text-center
-                    ${activeTab === tab.key
-                      ? `text-${activeColor} border-b-2 border-${activeColor}`
-                      : 'text-gray-500 hover:text-gray-700 hover:border-b-2 hover:border-gray-300'
-                    }
-                  `}
-                >
-                  {tab.name}
-                </button>
-              ))}
-            </div>
-
-            {/* Tab Content Area (Padding for readability) */}
-            <div className="p-6 sm:px-8">
-                {renderContent()}
-            </div>
+        <div className="bg-white shadow-md">
+          <div className="flex border-b border-gray-200">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`
+                  flex-grow py-3 px-0 text-sm font-medium transition-colors duration-200
+                  focus:outline-none text-center
+                  ${activeTab === tab.key
+                    ? `text-indigo-700 border-b-2 border-indigo-700`
+                    : 'text-gray-500 hover:text-gray-700 hover:border-b-2 hover:border-gray-300'
+                  }
+                `}
+              >
+                {tab.name}
+              </button>
+            ))}
           </div>
+          <div className="p-6 sm:px-8">
+            {renderContent()}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
-export default ProfileHeaderCard;
+export default FarmerProfile;
+
+/*
+  The following is a combined FarmerProfile component that merges your backend logic (fetching profile data) 
+  with the UI/UX from the second code. It uses the fetched profile data for the header, tabs, and profile details.
+*/
+
+
+// --- UTILITY COMPONENTS ---

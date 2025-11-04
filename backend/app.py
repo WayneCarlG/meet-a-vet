@@ -18,9 +18,9 @@ jwt = JWTManager()
 #     """Helper function to get the MongoDB 'users' collection."""
 #     return mongo.db.users
 
-# --- Initialize the Flask App ---
+# Initialize the Flask App
 app = Flask(__name__)
-# Load the config from your file
+
 app.config.from_object(Config)
 
 # Initialize Extensions
@@ -119,9 +119,6 @@ def login():
     # Handle preflight OPTIONS request
     if request.method == 'OPTIONS':
         response = make_response()
-        # response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-        # response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        # response.headers.add('Access-Control-Allow-Methods', 'POST')
         return response
 
     data = request.get_json()
@@ -137,35 +134,41 @@ def login():
     if not user or not bcrypt.check_password_hash(user['password_hash'], password):
         return jsonify({'error': 'Invalid email or password'}), 401
 
+    #This is the identity subject
+    identity_string = str(user['_id'])
+
     #Identity with user Id and role
-    identity = {
+    additional_claims = {
         'user_id': str(user['_id']),
         'email': user['email'],
-        'role': user['role']
+        'role': user.get('role')
     }
-    access_token = create_access_token(identity=identity)
+    access_token = create_access_token(
+        identity=identity_string,
+        additional_claims=additional_claims
+        )
 
     response = jsonify({
         'message': 'Login successful',
         'access_token': access_token,
-        'role': user['role']
+        'role': user.get('role')
     }), 200
 
     return response
 
+
 @app.route('/api/profile', methods=['GET'])
-@jwt_required(locations=["headers"]) # This protects the route
+@jwt_required(locations=["headers"])
 def get_profile():
     """
     Get the logged-in user's profile data.
     """
-    identity = get_jwt_identity()
-    user_id = identity['user_id']
+    user_id = get_jwt_identity()
     
     users_collection = mongo.db.users
     user = users_collection.find_one(
         {"_id": ObjectId(user_id)},
-        {"password_hash": 0} # Exclude the password hash from the response
+        {"password_hash": 0}
     )
 
     if not user:
@@ -173,6 +176,8 @@ def get_profile():
         
     # Convert _id to string
     user['_id'] = str(user['_id'])
+
+
     # Convert dates if they exist (example)
     if 'created_at' in user:
         user['created_at'] = user['created_at'].isoformat()
@@ -188,8 +193,7 @@ def update_profile():
     """
     Update the logged-in user's profile data.
     """
-    identity = get_jwt_identity()
-    user_id = identity['user_id']
+    user_id = get_jwt_identity()
     
     data = request.get_json()
     

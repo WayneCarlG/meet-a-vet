@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const SignUpForm = () => {
   const roles = [
@@ -6,6 +8,11 @@ const SignUpForm = () => {
     { value: 'surgeon', label: 'Veterinary Surgeon' },
     { value: 'paraprofessional', label: 'Veterinary Paraprofessional' },
   ];
+
+  // The Flask API endpoint for registration
+  const API_URL = 'http://localhost:5000/register';
+
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -17,13 +24,15 @@ const SignUpForm = () => {
   });
 
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(''); // State for success message
 
   const isSurgeon = formData.role === 'surgeon';
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    setError('');
+    setError(''); // Clear error on change
+    setSuccess(''); // Clear success on change
   };
 
   const handleRoleChange = (newRole) => {
@@ -37,14 +46,19 @@ const SignUpForm = () => {
     setError('');
   };
 
-  const handleSubmit = (e) => {
+  // --- UPDATED handleSubmit Function ---
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(''); // Clear previous errors
+    setSuccess('');
 
+    // --- 1. React-side Validation ---
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
     
+    // This validation is also in the backend, but good to have in frontend
     if (isSurgeon && (!formData.licenseNumber || !formData.licenseExpiry)) {
       setError('Veterinary Surgeons must provide a valid license number and expiry date.');
       return;
@@ -55,8 +69,38 @@ const SignUpForm = () => {
       return;
     }
 
-    console.log('Attempting signup with data:', formData);
-    alert(`Account created for ${formData.email} as a ${formData.role}!`);
+    // --- 2. API Call with Axios ---
+    try {
+      // Send the entire formData state. The keys match what the Flask API expects.
+      const response = await axios.post(API_URL, formData);
+
+      // Handle Success (HTTP 201 Created)
+      if (response.status === 201) {
+        setSuccess(response.data.message || 'Account created successfully!');
+        // Optionally, clear the form
+        setFormData({
+          email: '', password: '', confirmPassword: '',
+          role: roles[0].value, licenseNumber: '', licenseExpiry: '',
+        });
+        
+        navigate('/login'); // Redirect to login page after successful registration
+      }
+
+    } catch (err) {
+      // --- 3. Handle Errors ---
+      if (err.response) {
+        // The request was made and the server responded with a status code
+        // (e.g., 400, 409, 500)
+        setError(err.response.data.message || 'An error occurred during registration.');
+      } else if (err.request) {
+        // The request was made but no response was received (e.g., Network Error)
+        setError('Network Error: Could not connect to the server. Is Flask running?');
+      } else {
+        // Something else happened
+        setError('An unexpected error occurred.');
+      }
+      console.error('Signup Error:', err);
+    }
   };
 
   const FormField = ({ label, id, type = 'text', required = true }) => (
@@ -151,6 +195,13 @@ const SignUpForm = () => {
           {error && (
             <div className="text-sm text-red-600 font-medium p-3 bg-red-50 border border-red-200 rounded-md">
               {error}
+            </div>
+          )}
+
+          {/* Success Display */}
+          {success && (
+            <div className="text-sm text-green-600 font-medium p-3 bg-green-50 border border-green-200 rounded-md">
+              {success}
             </div>
           )}
 
