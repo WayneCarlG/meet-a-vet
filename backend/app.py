@@ -110,6 +110,7 @@ def register():
     except Exception as e:
         print(f"Error inserting user: {e}")
         return jsonify({'error': 'An error occurred during registration'}), 500
+        
 
 @app.route('/login', methods=['POST', 'OPTIONS'])
 def login():
@@ -177,13 +178,16 @@ def get_profile():
     # Convert _id to string
     user['_id'] = str(user['_id'])
 
+    # Normalize animals to animalRecords for frontend compatibility
+    animals = user.get('animals', [])
+    user['animalRecords'] = animals
 
     # Convert dates if they exist (example)
     if 'created_at' in user:
         user['created_at'] = user['created_at'].isoformat()
     if 'license_expiry' in user and isinstance(user['license_expiry'], datetime):
-         user['license_expiry'] = user['license_expiry'].isoformat().split('T')[0]
-         
+        user['license_expiry'] = user['license_expiry'].isoformat().split('T')[0]
+
     return jsonify(user), 200
 
 
@@ -230,6 +234,117 @@ def update_profile():
         print(f"Error updating profile: {e}")
         return jsonify({"error": "An error occurred during update"}), 500
 
+
+@app.route('/api/add_animal', methods=['POST'])
+@jwt_required()
+def add_animal():
+    """
+    API endpoint to add a new animal to the logged-in user's profile
+    """
+    # Read JSON payload
+    data = request.get_json()
+    if not data or 'name' not in data or 'species' not in data:
+        return jsonify({'error': 'Missing Fields Required'}), 400
+
+    # Debug: log Authorization header (helps diagnose 401 issues)
+    try:
+        auth_header = request.headers.get('Authorization')
+        print(f"add_animal: Authorization header: {auth_header}")
+    except Exception:
+        pass
+
+    user_id = get_jwt_identity()
+
+    animal = {
+        'name': data.get('name'),
+        'species': data.get('species'),
+        'breed': data.get('breed', ''),
+        'age': data.get('age', ''),
+        'gender': data.get('gender', ''),
+        'notes': data.get('notes', ''),
+        'owner_id': user_id,
+        'added_at': datetime.utcnow()
+    }
+
+    try:
+        result = mongo.db.users.update_one(
+            {'_id': ObjectId(user_id)},
+            {'$push': {'animals': animal}}
+        )
+        if result.matched_count == 0:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Return the newly created animal document for client-side state update
+        return jsonify(animal), 201
+    except Exception as e:
+        print(f"Error adding animal: {e}")
+        return jsonify({'error': 'An error occurred while adding the animal'}), 500
+
+@app.route('/api/animals', methods=['GET'])
+@jwt_required()
+def get_animals():
+        # Return the created animal so client can update local state
+    return jsonify(animal), 201
+    """
+    API endpoint to fetch all animals for the logged-in user.
+    """
+    user_id = get_jwt_identity()
+    
+    users_collection = mongo.db.users
+    user = users_collection.find_one(
+        {"_id": ObjectId(user_id)},
+        {"animals": 1}
+    )
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    animals = user.get('animals', [])
+    
+    return jsonify({"animals": animals}), 200
+
+@app.route('/api/summary', methods=['GET'])
+@jwt_required()
+def get_summary():
+
+    """
+    API endpoint to fetch summary data for the logged-in user.
+    """
+    user_id = get_jwt_identity()
+    
+    users_collection = mongo.db.users
+    user = users_collection.find_one(
+        {"_id": ObjectId(user_id)},
+        {"animals": 1}
+    )
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    animals = user.get('animals', [])
+    total_animals = len(animals)
+
+    # Compute species distribution
+    species_counts = {}
+    for a in animals:
+        species = a.get('species', 'Unknown')
+        species_counts[species] = species_counts.get(species, 0) + 1
+
+    species_distribution = [
+        { 'name': name, 'count': count, 'fill': f"#{(hash(name) & 0xFFFFFF):06x}" }
+        for name, count in species_counts.items()
+    ]
+
+    summary = {
+        "totalAnimals": total_animals,
+        "totalSpecies": len(species_counts),
+        "scheduledAppointments": 0,  # placeholder, implement if you store appointments
+        "speciesDistribution": species_distribution,
+        "animalRecords": animals
+    }
+
+    return jsonify(summary), 200
+
 @app.route('/api/vets', methods=['GET'])
 def get_vets():
     """
@@ -254,6 +369,8 @@ def get_vets():
 
     
     return jsonify({"vets": vets}), 200
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
