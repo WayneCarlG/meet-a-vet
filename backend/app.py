@@ -6,13 +6,13 @@ from datetime import datetime
 from bson.objectid import ObjectId
 from flask_cors import CORS
 from config import Config
-from flask_jwt_extended import JWTManager, create_access_token, JWTManager,jwt_required, get_jwt_identity, set_access_cookies
+from flask_jwt_extended import JWTManager, create_access_token, JWTManager,jwt_required, get_jwt_identity
+from agora_token_builder import RtcTokenBuilder, RtmTokenBuilder
 
 # --- INITIALIZE EXTENSIONS ---
 mongo = PyMongo()
 bcrypt = Bcrypt()
 jwt = JWTManager()
-
 #This helper function also turned giibberish
 # def get_users_collection():
 #     """Helper function to get the MongoDB 'users' collection."""
@@ -46,8 +46,270 @@ CORS(
 
 @app.route('/')
 def index():
-    return "Welcome to the Farm Application API!"
+    return "Welcome to the Meet A Vet Application API!"
 
+@app.route('/api/appointments', methods=['POST'])
+@jwt_required()
+def create_appointment():
+    data = request.get_json()
+    user_id = get_jwt_identity()
+    
+    appointment = {
+        "appointment_id": str(ObjectId()),
+        "user_id": user_id,
+        "vet_id": data.get("vet_id"),
+        "animal_id": data.get("animal_id"),
+        "appointment_date": data.get("appointment_date"),
+        "description": data.get("reason"),
+        "created_at": datetime.utcnow()
+    }
+    
+    appointments_collection = mongo.db.appointments
+    result = appointments_collection.insert_one(appointment)
+    
+    return jsonify({"message": "Appointment created", "appointment_id": str(result.inserted_id)}), 201
+
+@app.route('/api/appointments', methods=['GET'])
+@jwt_required()
+def appointment():
+    user_id = get_jwt_identity()
+    appointments_collection = mongo.db.appointments
+    appointments = list(appointments_collection.find({"user_id": user_id}))
+    
+    # Convert ObjectId to string for JSON serialization
+    for appt in appointments:
+        appt['_id'] = str(appt['_id'])
+    
+    return jsonify(appointments), 200
+
+def get_mpesa_auth_token():
+    """Gets an OAuth2 token from the M-Pesa API."""
+    try:
+        creds = f"{MPESA_CONSUMER_KEY}:{MPESA_CONSUMER_SECRET}"
+        auth = base64.b64encode(creds.encode('utf-8')).decode('utf-8')
+        headers = {'Authorization': f'Basic {auth}'}
+        
+        response = requests.get(AUTH_URL, headers=headers)
+        response.raise_for_status()  # Raise an error for bad status codes
+        
+        token = response.json().get('access_token')
+        return token
+    except Exception as e:
+        print(f"Error getting M-Pesa auth token: {e}")
+        return None
+
+#
+# === ENDPOINT 1: INITIATE PAYMENT (React calls this) ===
+#
+@app.route('/api/initiate-stk-push', methods=['POST'])
+def initiate_stk_push():
+    """
+    Initiates an STK push. React app sends {phone: '254...', amount: 1, appointment_id: '...'}
+    """
+    data = request.get_json()
+    phone_number = data.get('phone')  # e.g., 2547XXXXXXXX
+    amount = data.get('amount')
+    appointment_id = data.get('appointment_id') # For tracking
+
+    if not all([phone_number, amount, appointment_id]):
+        return jsonify({"error": "Missing phone, amount, or appointment_id"}), 400
+
+    # 1. Get auth token
+    access_token = get_mpesa_auth_token()
+    if not access_token:
+        return jsonify({"error": "Failed to get auth token"}), 500
+
+    # 2. Create timestamp and password
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    password_data = f"{MPESA_SHORTCODE}{MPESA_PASSKEY}{timestamp}"
+    password = base64.b64encode(password_data.encode('utf-8')).decode('utf-8')
+
+    # 3. This is the URL Safaricom will POST to *after* payment
+    callback_url = f"{NGROK_URL}/api/payment-callback"
+
+    # 4. Build the STK Push payload
+    payload = {
+        "BusinessShortCode": MPESA_SHORTCODE,
+        "Password": password,
+        "Timestamp": timestamp,
+        "TransactionType": "CustomerPayBillOnline",  # or "CustomerBuyGoodsOnline" for Till
+        "Amount": str(amount), # Must be a string
+        "PartyA": phone_number,
+        "PartyB": MPESA_SHORTCODE,
+        "PhoneNumber": phone_number,
+        "CallBackURL": callback_url,
+        "AccountReference": appointment_id,
+        "TransactionDesc": "Vet Telemedicine Consultation"
+    }
+
+    # 5. Send the STK Push request to Safaricom
+    headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
+    try:
+        response = requests.post(STK_PUSH_URL, json=payload, headers=headers)
+        response.raise_for_status()
+        
+        # 6. Get the response from Safaricom
+        stk_response = response.json()
+        checkout_request_id = stk_response.get('CheckoutRequestID')
+
+        if not checkout_request_id:
+            return jsonify({"error": "Failed to initiate STK push", "details": stk_response}), 500
+
+        # 7. Save to MongoDB with 'pending' status
+        payment_record = {
+            "checkout_request_id": checkout_request_id,
+            "appointment_id": appointment_id,
+            "phone_number": phone_number,
+            "amount": amount,
+            "status": "pending",
+            "timestamp": datetime.now()
+        }
+        payments_collection.insert_one(payment_record)
+
+        return jsonify({"message": "STK push initiated successfully", "checkout_request_id": checkout_request_id}), 200
+
+    except requests.exceptions.HTTPError as e:
+        return jsonify({"error": "HTTP Error", "details": str(e.response.text)}), 500
+    except Exception as e:
+        return jsonify({"error": "An unexpected error occurred", "details": str(e)}), 500
+
+#
+# === ENDPOINT 2: PAYMENT CALLBACK (Safaricom calls this) ===
+#
+@app.route('/api/payment-callback', methods=['POST'])
+def payment_callback():
+    """
+    This is the endpoint Safaricom POSTs to after the user pays.
+    """
+    print("--- Payment Callback Received ---")
+    data = request.get_json()
+    print(data)
+
+    try:
+        # Extract the relevant data from the callback
+        stk_callback = data.get('Body', {}).get('stkCallback', {})
+        checkout_request_id = stk_callback.get('CheckoutRequestID')
+        result_code = stk_callback.get('ResultCode')
+
+        # Find the payment in our database
+        payment_record = payments_collection.find_one({"checkout_request_id": checkout_request_id})
+
+        if not payment_record:
+            print(f"Error: No payment record found for {checkout_request_id}")
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
+
+        # Update the payment status based on the result
+        if result_code == 0:
+            # Payment was successful
+            new_status = "completed"
+            
+            # Extract metadata (optional but good)
+            metadata = stk_callback.get('CallbackMetadata', {}).get('Item', [])
+            mpesa_receipt = next((item['Value'] for item in metadata if item['Name'] == 'MpesaReceiptNumber'), None)
+            
+            payments_collection.update_one(
+                {"_id": payment_record['_id']},
+                {"$set": {
+                    "status": new_status, 
+                    "mpesa_receipt": mpesa_receipt,
+                    "callback_data": stk_callback # Save the whole callback
+                }}
+            )
+            
+            # --- IMPORTANT ---
+            # This is where you would update your Appointment collection
+            # e.g., db.appointments.update_one({"_id": payment_record['appointment_id']}, {"$set": {"paid": True}})
+            # --- --- --- --- ---
+            
+        else:
+            # Payment failed (e.g., user cancelled, insufficient funds)
+            new_status = "failed"
+            payments_collection.update_one(
+                {"_id": payment_record['_id']},
+                {"$set": {"status": new_status, "callback_data": stk_callback}}
+            )
+
+        print(f"Payment {checkout_request_id} status updated to {new_status}")
+
+    except Exception as e:
+        print(f"Error in callback: {e}")
+        # Even if we fail, tell Safaricom we received it.
+        # Otherwise, it will keep retrying.
+        return jsonify({"ResultCode": 1, "ResultDesc": "Failed internally"}), 200
+
+    # Tell Safaricom "Thank you, we got it."
+    return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"}), 200
+
+#
+# === ENDPOINT 3: PAYMENT STATUS (React calls this) ===
+#
+@app.route('/api/payment-status/<string:checkout_request_id>', methods=['GET'])
+def payment_status(checkout_request_id):
+    """
+    React app polls this endpoint to check if the payment is complete.
+    """
+    payment_record = payments_collection.find_one({"checkout_request_id": checkout_request_id})
+
+    if not payment_record:
+        return jsonify({"error": "Payment not found"}), 404
+
+    return jsonify({
+        "status": payment_record.get('status'),
+        "checkout_request_id": checkout_request_id
+    }), 200
+
+@app.route("/api/get-token", methods=["POST"])
+def get_token():
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON payload"}), 400
+
+        user_id = data.get("userId")
+        channel_name = data.get("channelName")
+   
+        if not user_id:
+            return jsonify({"error": "Unauthorized, User Id Required"}), 403
+        if not channel_name:
+            return jsonify({"error": "Channel Name Required"}), 400
+
+        expire_time_in_seconds = 3600
+        current_timestamp = int(datetime.utcnow().timestamp())
+        privilege_expired_ts = current_timestamp + expire_time_in_seconds
+
+
+        rtc_token = RtcTOkenBuilder.buildTokenWithUid(
+            Config.AGORA_APP_ID,
+            Config.AGORA_APP_CERTIFICATE,
+            channel_name, 
+            user_id,
+            0,
+            Role_Rtc_Publisher,
+            privilege_expired_ts
+        )
+
+        rtm_token = RtmTokenBuilder.buildToken(
+            Config.AGORA_APP_ID,
+            Config.AGORA_APP_CERTIFICATE,
+            user_id,
+            privilege_expired_ts
+        )
+
+        return jsonify({
+            "rtcToken": rtc_token,
+            "rtmToken": rtm_token,
+            "appid": Config.AGORA_APP_ID,
+            "channelName": channel_name,
+            "uid": user_id,
+            "expiresIn": expire_time_in_seconds
+        }),200
+
+    except Exception as e:
+        app.logger.error(f"Error generating tokens: {e}")
+        return jsonify({"error": "Internal Server Error"}), 500
+    
+    
 @app.route('/register', methods=['POST'])
 def register():
     """
@@ -80,6 +342,7 @@ def register():
         'email': email,
         'password_hash': hashed_password,
         'role': role,
+        'username': full_name,
         'firstName': full_name.capitalize(), # Add default name
         'lastName': "",
         'avatarUrl': f"https://placehold.co/100x100/EBF4FF/7F9CF5?text={full_name[0].upper()}", # Default avatar
@@ -132,22 +395,31 @@ def login():
     users_collection = mongo.db.users
     user = users_collection.find_one({'email': email})
 
-    if not user or not bcrypt.check_password_hash(user['password_hash'], password):
+    if not user:
         return jsonify({'error': 'Invalid email or password'}), 401
 
-    #This is the identity subject
+    if not bcrypt.check_password_hash(user['password_hash'], password):
+        return jsonify({'error': 'Invalid email or password'}), 401
+
+    # Verify role is present
+    if 'role' not in user:
+        return jsonify({'error': 'User account is not properly configured'}), 400
+
+    # This is the identity subject
     identity_string = str(user['_id'])
 
-    #Identity with user Id and role
+    # Identity with user Id and role
     additional_claims = {
         'user_id': str(user['_id']),
         'email': user['email'],
-        'role': user.get('role')
+        'role': user['role']
     }
+
+    # Create access token with role in claims
     access_token = create_access_token(
         identity=identity_string,
         additional_claims=additional_claims
-        )
+    )
 
     response = jsonify({
         'message': 'Login successful',
@@ -370,6 +642,262 @@ def get_vets():
     
     return jsonify({"vets": vets}), 200
 
+
+@app.route('/admin-login', methods=['POST', 'OPTIONS'])
+def admin_login():
+    """
+    Handle admin login and authentication.
+    """
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        response = make_response()
+        return response
+
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({'error': 'Email and password are required'}), 400
+
+    users_collection = mongo.db.users
+    user = users_collection.find_one({'email': email, 'role': 'admin'})
+
+    if not user or not bcrypt.check_password_hash(user['password_hash'], password):
+        return jsonify({'error': 'Invalid email or password'}), 401
+
+    #This is the identity subject
+    identity_string = str(user['_id'])
+
+    #Identity with user Id and role
+    additional_claims = {
+        'user_id': str(user['_id']),
+        'email': user['email'],
+        'role': user.get('role')
+    }
+    access_token = create_access_token(
+        identity=identity_string,
+        additional_claims=additional_claims
+        )
+
+    response = jsonify({
+        'message': 'Login successful',
+        'access_token': access_token,
+        'role': user.get('role')
+    }), 200
+
+    return response
+
+
+@app.route('/api/admin/stats', methods=['GET'])
+@jwt_required()
+def admin_dashboard():
+    """
+    API endpoint to fetch admin dashboard data.
+    """
+    users_collection = mongo.db.users
+    
+    
+    query = { 'role': { '$in': ['surgeon', 'paraprofessional', 'farmer'] } }
+    
+    # Exclude the password hash from the results for security
+    projection = { 'password_hash': 0 }
+    
+    vets = list(users_collection.find(query, projection))
+    
+    # Convert MongoDB's _id object to a string for JSON compatibility
+    for vet in vets:
+        vet['_id'] = str(vet['_id'])
+        # Handle potential datetime objects if you store expiry as date
+        if 'license_expiry' in vet and isinstance(vet['license_expiry'], datetime):
+            vet['license_expiry'] = vet['license_expiry'].isoformat()
+    
+        return jsonify({"vets": vets}), 200
+
+@app.route('/api/admin/farmers', methods=['GET'])
+@jwt_required()
+def admin_farmers():
+    """
+    API endpoint to fetch all farmers for the admin dashboard.
+    """
+    users_collection = mongo.db.users
+    
+    
+    query = { 'role': 'farmer' }
+    
+    # Exclude the password hash from the results for security
+    projection = { 'password_hash': 0 }
+    
+    vets = list(users_collection.find(query, projection))
+    
+    # Convert MongoDB's _id object to a string for JSON compatibility
+    for vet in vets:
+        vet['_id'] = str(vet['_id'])
+        # Handle potential datetime objects if you store expiry as date
+        if 'license_expiry' in vet and isinstance(vet['license_expiry'], datetime):
+            vet['license_expiry'] = vet['license_expiry'].isoformat()
+
+    return jsonify({"farmers": vets}), 200
+
+@app.route('/api/admin/surgeons', methods=['GET'])
+@jwt_required()
+def admin_surgeons():
+    """
+    API endpoint to fetch all surgeons for the admin dashboard.
+    """
+    users_collection = mongo.db.users
+    
+    
+    query = { 'role': 'surgeon' }
+    
+    # Exclude the password hash from the results for security
+    projection = { 'password_hash': 0 }
+    
+    vets = list(users_collection.find(query, projection))
+    
+    # Convert MongoDB's _id object to a string for JSON compatibility
+    for vet in vets:
+        vet['_id'] = str(vet['_id'])
+        # Handle potential datetime objects if you store expiry as date
+        if 'license_expiry' in vet and isinstance(vet['license_expiry'], datetime):
+            vet['license_expiry'] = vet['license_expiry'].isoformat()
+
+    return jsonify({"surgeons": vets}), 200
+
+@app.route('/api/admin/paraprofessionals', methods=['GET'])
+@jwt_required()
+def admin_paraprofessionals():
+    """
+    API endpoint to fetch all paraprofessionals for the admin dashboard.
+    """
+    users_collection = mongo.db.users
+    
+    
+    query = { 'role': 'paraprofessional' }
+    
+    # Exclude the password hash from the results for security
+    projection = { 'password_hash': 0 }
+    
+    vets = list(users_collection.find(query, projection))
+    
+    # Convert MongoDB's _id object to a string for JSON compatibility
+    for vet in vets:
+        vet['_id'] = str(vet['_id'])
+        # Handle potential datetime objects if you store expiry as date
+        if 'license_expiry' in vet and isinstance(vet['license_expiry'], datetime):
+            vet['license_expiry'] = vet['license_expiry'].isoformat()
+
+    return jsonify({"paraprofessionals": vets}), 200
+
+@app.route('/api/admin/transactions', methods=['GET'])
+@jwt_required()
+def admin_transactions():
+    """
+    API endpoint to fetch all transactions for the admin dashboard.
+    """
+    transactions_collection = mongo.db.transactions
+    
+    transactions = list(transactions_collection.find())
+    
+    # Convert MongoDB's _id object to a string for JSON compatibility
+    for transaction in transactions:
+        transaction['_id'] = str(transaction['_id'])
+        # Handle potential datetime objects
+        if 'date' in transaction and isinstance(transaction['date'], datetime):
+            transaction['date'] = transaction['date'].isoformat()
+
+    return jsonify({"transactions": transactions}), 200
+
+    @app.route('/api/admin/users/<user_id>', methods=['PUT', 'DELETE'])
+    @jwt_required()
+    def admin_manage_user(user_id):
+        """
+        PUT: Admin updates a user's profile (cannot change password here).
+        DELETE: Admin deletes a user (cannot delete themselves).
+        """
+        admin_id = get_jwt_identity()
+        users_collection = mongo.db.users
+
+        # Verify admin privileges
+        try:
+            admin = users_collection.find_one({"_id": ObjectId(admin_id)})
+        except Exception:
+            return jsonify({"error": "Invalid admin id"}), 400
+
+        if not admin or admin.get("role") != "admin":
+            return jsonify({"error": "Forbidden: admin access required"}), 403
+
+        # Validate target user id
+        try:
+            target_obj_id = ObjectId(user_id)
+        except Exception:
+            return jsonify({"error": "Invalid user id"}), 400
+
+        # DELETE: remove user
+        if request.method == "DELETE":
+            if str(target_obj_id) == str(admin_id):
+                return jsonify({"error": "Admins cannot delete their own account"}), 400
+
+            result = users_collection.delete_one({"_id": target_obj_id})
+            if result.deleted_count == 0:
+                return jsonify({"error": "User not found"}), 404
+
+            return jsonify({"message": "User deleted successfully"}), 200
+
+        # PUT: update user
+        data = request.get_json() or {}
+        # Allowed fields (explicit)
+        allowed_keys = {
+            "firstName", "lastName", "email", "role",
+            "phone1", "phone2", "location", "avatarUrl",
+            "license_number", "license_expiry"
+        }
+        update_fields = {k: v for k, v in data.items() if k in allowed_keys and v is not None}
+
+        if not update_fields:
+            return jsonify({"error": "No valid fields provided for update"}), 400
+
+        # If email is changing, ensure uniqueness
+        if "email" in update_fields:
+            existing = users_collection.find_one({"email": update_fields["email"], "_id": {"$ne": target_obj_id}})
+            if existing:
+                return jsonify({"error": "Email already in use by another account"}), 400
+
+        # If role provided, validate allowed roles
+        if "role" in update_fields:
+            if update_fields["role"] not in {"admin", "surgeon", "paraprofessional", "farmer", "user"}:
+                return jsonify({"error": "Invalid role"}), 400
+
+        # Parse license_expiry if present (expect YYYY-MM-DD)
+        if "license_expiry" in update_fields:
+            val = update_fields["license_expiry"]
+            if isinstance(val, str) and val:
+                try:
+                    update_fields["license_expiry"] = datetime.strptime(val, "%Y-%m-%d")
+                except ValueError:
+                    return jsonify({"error": "license_expiry must be YYYY-MM-DD"}), 400
+            else:
+                # remove if empty or invalid type
+                update_fields.pop("license_expiry", None)
+
+        try:
+            result = users_collection.update_one({"_id": target_obj_id}, {"$set": update_fields})
+            if result.matched_count == 0:
+                return jsonify({"error": "User not found"}), 404
+
+            # Return updated user without password hash
+            updated = users_collection.find_one({"_id": target_obj_id}, {"password_hash": 0})
+            if updated:
+                updated["_id"] = str(updated["_id"])
+                if "license_expiry" in updated and isinstance(updated["license_expiry"], datetime):
+                    updated["license_expiry"] = updated["license_expiry"].isoformat().split("T")[0]
+                if "created_at" in updated and isinstance(updated["created_at"], datetime):
+                    updated["created_at"] = updated["created_at"].isoformat()
+            return jsonify({"message": "User updated successfully", "user": updated}), 200
+
+        except Exception as e:
+            app.logger.error(f"Admin manage user error: {e}")
+            return jsonify({"error": "An error occurred while updating user"}), 500
 
 
 if __name__ == '__main__':

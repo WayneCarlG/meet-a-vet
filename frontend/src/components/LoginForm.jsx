@@ -11,52 +11,6 @@ export default function Login() {
   const [error, setError] = useState(""); // State for handling errors
   const navigate = useNavigate();
 
-  // const API_URL = 'http://localhost:5000/login';
-
-  // const handleSubmit = async (e) => {
-  //   e.preventDefault(); // Prevent default form submission
-  //   setError(""); // Clear previous errors
-
-  //   try {
-  //     // Send login data to the Flask backend
-  //     const response = await axios.post(API_URL, {
-  //       email: email,
-  //       password: password},
-  //       { withCredentials: true
-  //   });
-
-  //     // Handle Success (HTTP 200 OK)
-  //     if (response.status === 200) {
-  //       // 1. Save the token to localStorage to keep the user logged in
-  //       localStorage.setItem('token', response.data.access_token);
-
-  //       // 2. Navigate based on role
-  //       const userRole = response.data.role;
-        
-  //       if (userRole === 'farmer') {
-  //         navigate('/farmer-profile') // Redirect farmer
-  //       } else if (userRole === 'surgeon' || userRole === 'paraprofessional') {
-  //         window.location.href = '/vet-dashboard'; // Redirect vets
-  //       } else {
-  //           navigate('/'); // Fallback
-  //       }
-  //     }
-
-  //   } catch (err) {
-  //     // Handle Errors (401, 400, or Network Error)
-  //     if (err.response) {
-  //       // The server responded with an error (e.g., "Invalid email or password")
-  //       setError(err.response.data.error || 'Login failed. Please try again.');
-  //     } else if (err.request) {
-  //       // Network error (server is down)
-  //       setError('Network Error: Could not connect to the server.');
-  //     } else {
-  //       setError('An unexpected error occurred.');
-  //     }
-  //     console.error('Login Error:', err);
-  //   }
-  // };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -80,7 +34,9 @@ export default function Login() {
         if (response.data.role === 'farmer') {
           navigate('/farmer-profile');
         } else if (response.data.role === 'surgeon' || response.data.role === 'paraprofessional') {
-          navigate('/vet-dashboard');
+          navigate('/vet-profile');
+        } else if (response.data.role === 'admin') {
+          navigate('/admin-dashboard');
         } else {
           navigate('/');
         }

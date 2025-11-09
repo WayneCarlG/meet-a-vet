@@ -4,7 +4,10 @@ import Home from './components/Home';
 import Login from './components/LoginForm';
 import FarmerProfile from './components/FarmerProfile';
 import SignUpForm from './components/RegisterForm';
-import VetProfilePage from './components/FindVet';
+import VetProfile from './components/vet_components/VetProfile';
+import AdminLogin from './components/admin/AdminLogin';
+import AdminDashboard from './components/admin/AdminDashboard';
+import PaymentComponent from './components/PaymentComponent';
 
 function App() {
   return (
@@ -15,7 +18,10 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/farmer-profile" element={<FarmerProfile />} />
           <Route path="register" element={<SignUpForm />}/>
-          <Route path ="/vet-profile" element={<VetProfilePage />} />
+          <Route path ="/vet-profile" element={<VetProfile />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route path="/admin-dashboard" element={<AdminDashboard />} />
+          <Route path="/payment" element={<PaymentComponent />} />
         </Routes>
       </div>
     </Router>

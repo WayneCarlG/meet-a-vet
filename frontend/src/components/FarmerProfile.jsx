@@ -4,6 +4,8 @@ import { PieChart as RechartsPieChart, Pie, Cell, Tooltip, Legend, ResponsiveCon
 import { useNavigate } from "react-router-dom";
 import AddAnimalModal from './AddAnimalModal';
 import BookingModal from './BookingModal';
+import CalendarComponent from './CalendarComponent';
+import AddAppointmentModal from "./AddApointmentModal";
 
 
 const LogoutIcon = () => (
@@ -339,15 +341,14 @@ const QuickActionsContent = ({ profile, setProfile, setSummary }) => {
       </button>
     </div>
   );
-
+  
   const CalendarCard = () => (
-    <div className="bg-white p-6 rounded-lg shadow-xl h-full border">
-      <h4 className="text-lg font-semibold text-gray-800 mb-4">Schedule of Events</h4>
-      <div className="p-4 bg-gray-50 rounded-md border text-center text-sm text-gray-500 h-64 flex flex-col justify-center">
-        <p className="font-bold mb-1">📅 Calendar Component Placeholder</p>
-        <p>This area displays scheduled appointments and tasks.</p>
-      </div>
-    </div>
+    <CalendarComponent
+      appointments={profile?.appointments || []}
+      profile={profile}
+      setProfile={setProfile}
+      setSummary={setSummary}
+    />
   );
 
   const NotificationPopup = () => (

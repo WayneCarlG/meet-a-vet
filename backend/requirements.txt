@@ -4,3 +4,5 @@ flask-pymongo
 flask-bcrypt
 flask-cors
 flask-jwt-extended
+agora-token-builder
+pymongo[srv]==3.12
